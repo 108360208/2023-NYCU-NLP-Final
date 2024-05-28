@@ -1,2 +1,3 @@
 *.pyc
 *.pth
+dataset/pre_test.csv

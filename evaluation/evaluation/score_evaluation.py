@@ -118,6 +118,8 @@ if __name__ == '__main__':
     arousal_pred = np.array(arousal_pred)
     valence_gold = np.array(valence_gold)
     arousal_gold = np.array(arousal_gold)
+    print(valence_gold)
+    print(valence_pred)
     
     valence_mae = mean_absolute_error(valence_gold, valence_pred)
     valence_r = pearsonr(valence_gold, valence_pred)[0]
