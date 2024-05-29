@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import mean_absolute_error
 from scipy.stats import pearsonr
 
-output_csv_path = "submission.csv"
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device)
@@ -34,7 +34,7 @@ def test(model, val_loader, device):
             for i in range(len(id)):
                 csv_result[id[i]] = {'Valence': outputs_np[i, 0], 'Arousal': outputs_np[i, 1]}
 
-    output_csv_path = "output.csv"
+    output_csv_path = "submission.csv"
     with open(output_csv_path, 'w', newline='') as csvfile:
         fieldnames = ['ID', 'Valence', 'Arousal']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

@@ -1,3 +1,5 @@
 *.pyc
 *.pth
 dataset/pre_test.csv
+runs/
+*.csv

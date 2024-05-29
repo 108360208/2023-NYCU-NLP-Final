@@ -58,10 +58,10 @@ class CVATDataLoader:
     
     def load_train_data(self, tokenizer, embedding_model):
         all_files = os.listdir(self.folder_path)
-        if "train.csv" in all_files:    
-            csv_files = ["train.csv"]
+        if "train_bert.csv" in all_files:    
+            csv_files = ["train_bert.csv"]
         else:
-            csv_files = all_files
+            csv_files = ['CVAT_3_SD.csv', 'CVAT_2_SD.csv', 'CVAT_1_SD.csv',  'CVAT_5_SD.csv', 'CVAT_4_SD.csv']
         print(all_files)
         data = []
         rows = []
@@ -86,6 +86,8 @@ class CVATDataLoader:
                     with torch.no_grad():
                         outputs = embedding_model(input_ids)
                         embedding = outputs[0].mean(dim=1).squeeze()
+                    # embedding = tokenizer.encode(row["Text"])
+                    # embedding = torch.tensor([embedding])
                     valence_mean = torch.tensor([float(row['Valence_Mean'])], dtype=torch.float32)
                     arousal_mean = torch.tensor([float(row['Arousal_Mean'])], dtype=torch.float32)
                     row['Embedding'] = embedding.numpy().tolist()
