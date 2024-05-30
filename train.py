@@ -5,7 +5,7 @@ import numpy as np
 from transformers import BertTokenizer, BertModel, AutoModel
 from utils.dataloader import CVATDataLoader 
 from torch.utils.data import DataLoader
-from model.CNN import CNN
+from model.CNN import CNN, VAE
 from tqdm import tqdm
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_absolute_error
@@ -14,7 +14,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import SubsetRandomSampler
 from tensorboardX import SummaryWriter
-
+from utils.utils_loss import PearsonLoss, KLloss
 
 writer = SummaryWriter()
 
@@ -26,16 +26,29 @@ embedding = BertModel.from_pretrained('bert-base-chinese')
 k_folds = 5
 kf = KFold(n_splits=k_folds, shuffle=False)
 
-def train(model, train_loader, criterion, optimizer, device, pbar):
+
+def train(model, train_loader, criterion, optimizer, device, epoch):
     model.train()
     running_loss = 0.0
 
-    for inputs, targets1, targets2 in train_loader:
-        inputs, valence, arousal = inputs.to(device), targets1.to(device), targets2.to(device)
+    for inputs, valence_mean, arousal_mean, valence_sd, arousal_ad in train_loader:
+        inputs, valence, arousal = inputs.to(device), valence_mean.to(device), arousal_mean.to(device)
         optimizer.zero_grad()
-        outputs = model(inputs)
-  
-        loss = criterion(outputs.float().squeeze(), torch.cat([valence, arousal], dim=1))
+        valence_sd = valence_sd.to(device)
+        arousal_ad = arousal_ad.to(device)
+        std = torch.cat([valence_sd, arousal_ad], dim=1)
+
+        if (epoch <= 30):
+            latent_mean = torch.cat([valence, arousal], dim=1)
+            latent_mean = latent_mean.unsqueeze(1)
+        else:
+            latent_mean = model.encoder(inputs)
+        z = model.reparameterize(latent_mean, std.unsqueeze(1))
+        embedding_recon =  model.decoder(z)
+        # embedding_recon, latent_mean, _ = model(inputs, std.unsqueeze(1))
+        # loss = criterion(outputs.float().squeeze(), torch.cat([valence, arousal], dim=1))
+        loss = criterion(embedding_recon.float(), inputs, latent_mean, valence, arousal)
+        
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
@@ -50,13 +63,17 @@ def evaluate(model, val_loader, criterion):
     valence_pearson = 0.0
     arousal_pearson = 0.0
     with torch.no_grad():
-        for inputs, targets1, targets2 in val_loader:
-            inputs, valence, arousal = inputs.to(device), targets1.to(device), targets2.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs.float().squeeze(), torch.cat([valence, arousal], dim=1))
-            running_loss += loss.item()
-            pred_valence = outputs[:, 0]
-            pred_arousal = outputs[:, 1]
+        for inputs, valence_mean, arousal_mean, _ ,_ in val_loader:
+            inputs, valence, arousal = inputs.to(device), valence_mean.to(device), arousal_mean.to(device)
+            optimizer.zero_grad()
+     
+            std = torch.cat([valence, arousal], dim=1)
+            embedding_recon, latent_mean, _ = model(inputs, std.unsqueeze(1))
+            # loss = criterion(outputs.float().squeeze(), torch.cat([valence, arousal], dim=1))
+            running_loss += 0
+            latent_mean = latent_mean.squeeze()
+            pred_valence = latent_mean[:, 0]
+            pred_arousal = latent_mean[:, 1]
             valence_MAE += mean_absolute_error(valence.float().squeeze().cpu().detach().numpy(), pred_valence.cpu().detach().numpy())
             arousal_MAE += mean_absolute_error(arousal.float().squeeze().cpu().detach().numpy(), pred_arousal.cpu().detach().numpy())
             valence_pearson += pearsonr(valence.float().squeeze().cpu().detach().numpy(), pred_valence.cpu().detach().numpy())[0]
@@ -66,13 +83,13 @@ def evaluate(model, val_loader, criterion):
 folder_path = 'dataset'
 dataset = CVATDataLoader(folder_path, tokenizer, embedding, "train")
 
-model = CNN(input_dim=768)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-5)
+model = VAE(input_dim=768, hidden_dim=2048, latent_dim = 2, output_dim = 768)
+criterion = KLloss()
+optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-4)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
-num_epochs = 300
+num_epochs = 600
 valence_MAE = []
 arousal_MAE = []
 valence_pearson = []
@@ -80,17 +97,17 @@ arousal_pearson = []
 
 indices = list(range(len(dataset)))
 
-train_indices, val_indices = train_test_split(indices, test_size=0.2, random_state=42)
+train_indices, val_indices = train_test_split(indices, test_size=0.2)
 
 train_sampler = SubsetRandomSampler(train_indices)
 train_loader = DataLoader(dataset, batch_size=32, sampler=train_sampler)
 
 val_sampler = SubsetRandomSampler(val_indices)
-val_loader = DataLoader(dataset, batch_size=32, sampler=val_sampler)
+val_loader = DataLoader(dataset, batch_size=512, sampler=val_sampler)
 
 with tqdm(total=(num_epochs), desc="Training progress") as pbar:
     for epoch in range(num_epochs):
-        train_loss = train(model, train_loader, criterion, optimizer, device, pbar)
+        train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
         writer.add_scalar('Train Loss', train_loss, epoch)
         if((epoch % 20) == 0 or epoch == num_epochs - 1):
             val_loss , MAE, PCC= evaluate(model, val_loader, criterion)
@@ -105,6 +122,8 @@ with tqdm(total=(num_epochs), desc="Training progress") as pbar:
             arousal_MAE.append(MAE[1])
             valence_pearson.append(PCC[0])
             arousal_pearson.append(PCC[1])
+        if epoch % 20 == 0:
+            torch.save(model.state_dict(), f"sentiment_analysis_model_{epoch}.pth")
         pbar.set_postfix({'train_loss': train_loss})
         pbar.update(1)
 # for fold, (train_index, val_index) in enumerate(kf.split(dataset)):
