@@ -27,17 +27,42 @@ class PearsonLoss(nn.Module):
         combined_loss = l1_loss_valence + l1_loss_arousal
         return combined_loss
     
-class KLloss(nn.Module):
+class Reconstloss(nn.Module):
     def __init__(self, alpha=0.5):
-        super(KLloss, self).__init__()
+        super(Reconstloss, self).__init__()
         self.alpha = alpha
 
-    def forward(self, embedding_reson, embedding, latent_mean, valence, arousal):
+    def forward(self, embedding_recon, embedding, latent_mean, valence, arousal):
 
-        reson_loss = nn.L1Loss(reduction="none")(embedding_reson, embedding)
+        reson_loss = nn.L1Loss(reduction="none")(embedding_recon, embedding)
         pred_valence, pred_arousal = torch.split(latent_mean, 1, dim=2)
         valence_loss = nn.L1Loss(reduction="none")(pred_valence.squeeze(1), valence)
         arousal_loss = nn.L1Loss(reduction="none")(pred_arousal.squeeze(1), arousal)
-        # print(reson_loss.mean(), valence_loss.mean(), arousal_loss.mean())
-        return reson_loss.mean() + valence_loss.mean() + arousal_loss.mean()
+        # print(reson_loss.mean(), valence_loss.mean(), arousal_loss.mean(), KL_loss)
+        return reson_loss.mean()* 0 + valence_loss.mean() + arousal_loss.mean()
+class KL_Loss(nn.Module):
+    def __init__(self, alpha=0.5):
+        super(KL_Loss, self).__init__()
+        self.alpha = alpha
+
+    def forward(self, mu1, logvar1, mu2, logvar2, batch_size):
+        # print(mu1, logvar1, mu2, logvar2)
+        kl_loss = kl_divergence(mu1, logvar1, mu2, logvar2)
+        
+        return kl_loss / batch_size
+    
+def kl_criterion(mu, logvar, batch_size):
+  KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+  KLD /= batch_size  
+  return KLD * 0.1
+
+
+def kl_divergence(mu1, logvar1, mu2, logvar2):
+
+    var1 = torch.exp(logvar1)
+    var2 = torch.exp(logvar2)
+    kl_loss = -0.5 * torch.sum(1 + logvar1 - mu1.pow(2) - logvar1.exp())
+    kl = 0.5 * (logvar2 - logvar1 + (var1 + (mu1 - mu2).pow(2)) / var2 - 1)
+    loss = 0.2 * kl.sum() + 0.8 * kl_loss
+    return loss
 

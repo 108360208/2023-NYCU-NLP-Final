@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
-
-import torch
-import torch.nn as nn
+from transformers import BertModel, BertTokenizer
 
 class CNN(nn.Module):
     def __init__(self, input_dim):
@@ -34,22 +32,35 @@ class CNN(nn.Module):
         x = self.dropout3(x)  # 在第三个全连接层后应用 Dropout
         x = self.fc4(x)
         return x
+class GaussianNoise(nn.Module):
+    def __init__(self, hidden_dim, latent_dim):
+        super().__init__()
+        self.fc_mu1 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_mu2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_mu3 = nn.Linear(hidden_dim, latent_dim)
+        
 
+    def forward(self, x):
+        h = torch.relu(self.fc_mu1(x))
+        h = torch.relu(self.fc_mu2(h))
+        mu = self.fc_mu3(h)
+        return mu
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim):
         super(Encoder, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)  # 添加一个隐藏层
         self.fc3 = nn.Linear(hidden_dim, hidden_dim)  # 添加一个隐藏层
-        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
-        
+        self.fc_mu = GaussianNoise(hidden_dim, latent_dim)
+        self.fc_logvar = GaussianNoise(hidden_dim, latent_dim)
 
     def forward(self, x):
         h = torch.relu(self.fc1(x))
         h = torch.relu(self.fc2(h))  # 添加一个隐藏层，并使用激活函数ReLU
         h = torch.relu(self.fc3(h))  # 添加一个隐藏层，并使用激活函数ReLU
         mu = self.fc_mu(h)
-        return mu
+        logvar = self.fc_logvar(h)
+        return mu, logvar
 
 class Decoder(nn.Module):
     def __init__(self, latent_dim, hidden_dim, output_dim):
@@ -78,10 +89,65 @@ class VAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def forward(self, x, logvar):
-        mu = self.encoder(x)
+    def forward(self, x):
+        mu , logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)
         x_recon = self.decoder(z)
         return x_recon, mu, z
+    
+    
+
+class UnetEncoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim, latent_dim):
+        super(UnetEncoder, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim, latent_dim)
+        
+    def forward(self, x):
+        h1 = torch.relu(self.fc1(x))
+        h2 = torch.relu(self.fc2(h1))
+        h3 = torch.relu(self.fc3(h2))
+        mu = self.fc_mu(h3)
+        logvar = self.fc_logvar(h3)
+        return h1, h2, h3, mu, logvar
+
+class UnetDecoder(nn.Module):
+    def __init__(self, latent_dim, hidden_dim, output_dim):
+        super(UnetDecoder, self).__init__()
+        self.fc1 = nn.Linear(latent_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.fc4 = nn.Linear(hidden_dim * 2, output_dim)
+
+    def forward(self, z, enc_h1, enc_h2, enc_h3):
+        h1 = torch.relu(self.fc1(z))
+        h1_concat = torch.cat([h1, enc_h3], dim=-1)
+        h2 = torch.relu(self.fc2(h1_concat))
+        h2_concat = torch.cat([h2, enc_h2], dim=-1)
+        h3 = torch.relu(self.fc3(h2_concat))
+        h3_concat = torch.cat([h3, enc_h1], dim=-1)
+        x_recon = self.fc4(h3_concat)
+        return x_recon
+
+class UnetVAE(nn.Module):
+    def __init__(self, input_dim, hidden_dim, latent_dim, output_dim):
+        super(UnetVAE, self).__init__()
+        self.encoder = UnetEncoder(input_dim, hidden_dim, latent_dim)
+        self.decoder = UnetDecoder(latent_dim, hidden_dim, output_dim)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x):
+        enc_h1, enc_h2, enc_h3, mu, logvar = self.encoder(x)
+        z = self.reparameterize(mu, logvar)
+        x_recon = self.decoder(z, enc_h1, enc_h2, enc_h3)
+        return x_recon, mu, logvar
+    
     
     

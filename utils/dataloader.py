@@ -58,7 +58,7 @@ class CVATDataLoader:
     
     def load_train_data(self, tokenizer, embedding_model):
         all_files = os.listdir(self.folder_path)
-        if "train_bert.csv" in all_files:    
+        if "train_jina.csv" in all_files:    
             csv_files = ["train_bert.csv"]
         else:
             csv_files = ['CVAT_3_SD.csv', 'CVAT_2_SD.csv', 'CVAT_1_SD.csv',  'CVAT_5_SD.csv', 'CVAT_4_SD.csv']
@@ -90,6 +90,8 @@ class CVATDataLoader:
                         embedding = outputs[0].mean(dim=1).squeeze()
                     # embedding = tokenizer.encode(row["Text"])
                     # embedding = torch.tensor([embedding])
+                    valence_mean = torch.tensor([float(row['Valence_Mean'])], dtype=torch.float32)
+                    arousal_mean = torch.tensor([float(row['Arousal_Mean'])], dtype=torch.float32)
                     valence_sd = torch.tensor([float(row['Valence_SD'])], dtype=torch.float32)
                     arousal_sd = torch.tensor([float(row['Arousal_SD'])], dtype=torch.float32)
                     row['Embedding'] = embedding.numpy().tolist()
@@ -97,7 +99,7 @@ class CVATDataLoader:
                     data.append((embedding, valence_mean, arousal_mean, valence_sd, arousal_sd))
 
         if(len(rows) > 0):
-            with open("dataset/train.csv", 'w', newline='', encoding='utf-8') as new_file:
+            with open("dataset/train_bert.csv", 'w', newline='', encoding='utf-8') as new_file:
                 writer = csv.DictWriter(new_file, fieldnames=rows[0].keys(), delimiter='\t')
                 writer.writeheader()
                 writer.writerows(rows)
