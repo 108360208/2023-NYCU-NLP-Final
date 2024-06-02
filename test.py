@@ -5,7 +5,7 @@ import numpy as np
 from transformers import BertTokenizer, BertModel
 from utils.dataloader import CVATDataLoader 
 from torch.utils.data import DataLoader
-from model.CNN import CNN, VAE, UnetVAE
+from model.CNN import CNN, VAE, UnetVAE, BERT_CNN
 from tqdm import tqdm
 from sklearn.model_selection import KFold
 from sklearn.metrics import mean_absolute_error
@@ -28,8 +28,8 @@ def test(model, val_loader, device):
         for id, inputs in val_loader:
             inputs = inputs.to(device)
             # outputs = model(inputs)
-            _, _, _, latent ,logvar = model.encoder(inputs)
-            latent = latent.squeeze(1)
+            output = model(inputs['input_ids'].squeeze(1) ,inputs['attention_mask'].squeeze(1))
+            latent = output.squeeze(1)
             # print(latent.shape)
             outputs_np = latent.cpu().numpy()
             # print(outputs_np)
@@ -49,7 +49,7 @@ def test(model, val_loader, device):
 folder_path = 'dataset'
 dataset = CVATDataLoader(folder_path, tokenizer, embedding, "test")
 dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
-model = UnetVAE(input_dim=768, hidden_dim=2048, latent_dim = 2, output_dim = 768)
+model = BERT_CNN('bert-base-chinese', num_classes=2)
 
 model.load_state_dict(torch.load('sentiment_analysis_model.pth'))
 
