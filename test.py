@@ -49,9 +49,9 @@ def test(model, val_loader, device):
 folder_path = 'dataset'
 dataset = CVATDataLoader(folder_path, tokenizer, embedding, "test")
 dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
-model = UnetVAE(input_dim=768, hidden_dim=2048, latent_dim = 2, output_dim = 768)
+model = UnetVAE(input_dim=768, hidden_dim=512, latent_dim = 2, output_dim = 768)
 
-model.load_state_dict(torch.load('sentiment_analysis_model.pth'))
+model.load_state_dict(torch.load('sentiment_3_fold_280.pth'))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
