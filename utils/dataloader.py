@@ -8,8 +8,8 @@ class CVATDataLoader:
     def __init__(self, folder_path, tokenizer, embedding_model, mode):
         self.folder_path = folder_path
         self.mode = mode
-        if(self.mode == "train"):
-            self.data = self.load_train_data(tokenizer, embedding_model)
+        if(self.mode == "train" or self.mode == "val"):
+            self.data = self.load_train_data(tokenizer, embedding_model, mode)
         elif self.mode == "test":
             self.data = self.load_test_data(tokenizer, embedding_model)
             
@@ -34,10 +34,12 @@ class CVATDataLoader:
         # df.to_csv("dataset/pre_test.csv", sep='\t', index=False, encoding='utf-8')
         return data
     
-    def load_train_data(self, tokenizer, embedding_model):
+    def load_train_data(self, tokenizer, embedding_model,mode):
         all_files = os.listdir(self.folder_path)
-        if "train_jina.csv" in all_files:    
-            csv_files = ["train_bert.csv"]
+        if "train_jina.csv" in all_files and mode == "train":    
+            csv_files = ["train.csv"]
+        elif "bert_val_train.csv" in all_files and mode == "val":
+            csv_files = ["bert_val_train.csv"]
         else:
             csv_files = ['CVAT_3_SD.csv', 'CVAT_2_SD.csv', 'CVAT_1_SD.csv',  'CVAT_5_SD.csv', 'CVAT_4_SD.csv']
         print(all_files)
@@ -71,7 +73,7 @@ class CVATDataLoader:
         return len(self.data)
 
     def __getitem__(self, index):
-        if(self.mode == "train"):
+        if(self.mode == "train" or self.mode == "val"):
             embedding, valence_mean, arousal_mean, valence_sd, arousal_sd = self.data[index]
             return embedding, valence_mean, arousal_mean, valence_sd, arousal_sd 
         elif self.mode == "test":

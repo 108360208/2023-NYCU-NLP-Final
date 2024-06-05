@@ -28,7 +28,7 @@ k_folds = 5
 kf = KFold(n_splits=k_folds, shuffle=False)
 
 
-def train(model, train_loader, criterion, optimizer, device, epoch):
+def train(model, train_loader, scheduler, optimizer, device, epoch):
     model.train()
     running_loss = 0.0
     reconloss = Reconstloss()
@@ -63,7 +63,8 @@ def train(model, train_loader, criterion, optimizer, device, epoch):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-
+    if((epoch+1) % 5 == 0):
+        scheduler.step()
     return running_loss / len(train_loader)
 
 def evaluate(model, val_loader, criterion):
@@ -93,56 +94,52 @@ def evaluate(model, val_loader, criterion):
     return running_loss / len(val_loader),  [valence_MAE/ len(val_loader), arousal_MAE/ len(val_loader)], [valence_pearson/ len(val_loader), arousal_pearson/ len(val_loader)]
 
 folder_path = 'dataset'
-dataset = CVATDataLoader(folder_path, tokenizer, embedding, "train")
+train_dataset = CVATDataLoader(folder_path, tokenizer, embedding, "train")
+val_dataset = CVATDataLoader(folder_path, tokenizer, embedding, "val")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 model = BERT_CNN('bert-base-chinese', num_classes=2)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.000001, weight_decay=5e-5)
+criterion = nn.L1Loss()
+optimizer = optim.AdamW(model.parameters(), lr=0.000001, weight_decay=5e-3)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
-num_epochs = 50
+model.load_state_dict(torch.load('sentiment_analysis_model_0.pth'))
+num_epochs = 150
 valence_MAE = []
 arousal_MAE = []
 valence_pearson = []
 arousal_pearson = []
 
-indices = list(range(len(dataset)))
+dataloader_train = DataLoader(train_dataset, batch_size=32, shuffle=True)
+dataloader_val = DataLoader(val_dataset, batch_size=512, shuffle=False)
 
-train_indices, val_indices = train_test_split(indices, test_size=0.2)
+optimizer = optim.Adam(model.parameters(), lr=0.000001, weight_decay=8e-3)
+# scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=30, eta_min=0.00000001)
 
-train_sampler = SubsetRandomSampler(train_indices)
-train_loader = DataLoader(dataset, batch_size=32, sampler=train_sampler)
-
-val_sampler = SubsetRandomSampler(val_indices)
-val_loader = DataLoader(dataset, batch_size=512, sampler=val_sampler)
-
-for fold, (train_index, val_index) in enumerate(kf.split(dataset)):
-    train_dataset = torch.utils.data.Subset(dataset, train_index)
-    val_dataset = torch.utils.data.Subset(dataset, val_index)
-    dataloader_train = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    dataloader_val = DataLoader(val_dataset, batch_size=512, shuffle=False)
-    with tqdm(total=(num_epochs), desc="Training progress") as pbar:
-        for epoch in range(num_epochs):
-            train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
-            writer.add_scalar('Train Loss', train_loss, epoch)
-            if(((epoch + 1) % 2) == 0 or epoch == num_epochs - 1):
-                val_loss , MAE, PCC= evaluate(model, val_loader, criterion)
-                print(f"Epoch [{epoch+1}/{num_epochs}], Val Loss: {val_loss:.4f}, Valence MAE: {MAE[0]:.4f}, Arousal MAE: {MAE[1]:.4f}, Valence PCC: {PCC[0]:.4f}, Arousal PCC: {PCC[1]:.4f}")
-                writer.add_scalar('Validation Loss', val_loss, epoch)
-                writer.add_scalar('Valence MAE', MAE[0], epoch)
-                writer.add_scalar('Arousal MAE', MAE[1], epoch)
-                writer.add_scalar('Valence PCC', PCC[0], epoch)
-                writer.add_scalar('Arousal PCC', PCC[1], epoch)
-            if(epoch == num_epochs - 1 ):
-                valence_MAE.append(MAE[0])
-                arousal_MAE.append(MAE[1])
-                valence_pearson.append(PCC[0])
-                arousal_pearson.append(PCC[1])
-            if epoch % 40 == 0:
-                torch.save(model.state_dict(), f"sentiment_analysis_model_{epoch}.pth")
-            pbar.set_postfix({'train_loss': train_loss})
-            pbar.update(1)
+with tqdm(total=(num_epochs), desc="Training progress") as pbar:
+    for epoch in range(num_epochs):
+        train_loss = train(model, dataloader_train, scheduler, optimizer, device, epoch)
+        writer.add_scalar('Train Loss', train_loss, epoch)
+        if(((epoch + 1) % 2) == 0 or epoch == num_epochs - 1):
+            val_loss , MAE, PCC= evaluate(model, dataloader_val, criterion)
+            print(f"Epoch [{epoch+1}/{num_epochs}], Val Loss: {val_loss:.4f}, Valence MAE: {MAE[0]:.4f}, Arousal MAE: {MAE[1]:.4f}, Valence PCC: {PCC[0]:.4f}, Arousal PCC: {PCC[1]:.4f}")
+            writer.add_scalar('Validation Loss', val_loss, epoch)
+            writer.add_scalar('Valence MAE', MAE[0], epoch)
+            writer.add_scalar('Arousal MAE', MAE[1], epoch)
+            writer.add_scalar('Valence PCC', PCC[0], epoch)
+            writer.add_scalar('Arousal PCC', PCC[1], epoch)
+        if(epoch == num_epochs - 1 ):
+            valence_MAE.append(MAE[0])
+            arousal_MAE.append(MAE[1])
+            valence_pearson.append(PCC[0])
+            arousal_pearson.append(PCC[1])
+        if epoch % 1 == 0:
+            torch.save(model.state_dict(), f"New_sentiment_analysis_model_{epoch}.pth")
+        pbar.set_postfix({'train_loss': train_loss})
+        pbar.update(1)
 writer.close()
 print("Valence MAE: ", np.mean(valence_MAE))
 print("Arousal MAE: ", np.mean(arousal_MAE))

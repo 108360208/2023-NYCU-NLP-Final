@@ -34,7 +34,7 @@ def test(model, val_loader, device):
             outputs_np = latent.cpu().numpy()
             # print(outputs_np)
             for i in range(len(id)):
-                csv_result[id[i]] = {'Valence': outputs_np[i, 0], 'Arousal': outputs_np[i, 1]}
+                csv_result[id[i]] = {'Valence': np.round(float(outputs_np[i, 0]),2), 'Arousal': np.round(float(outputs_np[i, 1]),2)}
 
     output_csv_path = "submission.csv"
     with open(output_csv_path, 'w', newline='') as csvfile:
@@ -51,7 +51,7 @@ dataset = CVATDataLoader(folder_path, tokenizer, embedding, "test")
 dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 model = BERT_CNN('bert-base-chinese', num_classes=2)
 
-model.load_state_dict(torch.load('sentiment_analysis_model.pth'))
+model.load_state_dict(torch.load('New_sentiment_analysis_model_25.pth'))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
