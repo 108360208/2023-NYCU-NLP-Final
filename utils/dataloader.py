@@ -14,8 +14,8 @@ class CVATDataLoader:
     def __init__(self, folder_path, tokenizer, embedding_model, mode):
         self.folder_path = folder_path
         self.mode = mode
-        if(self.mode == "train"):
-            self.data = self.load_train_data(tokenizer, embedding_model)
+        if(self.mode == "train" or self.mode == "val"):
+            self.data = self.load_train_data(tokenizer, embedding_model, self.mode)
         elif self.mode == "test":
             self.data = self.load_test_data(tokenizer, embedding_model)
             
@@ -62,14 +62,17 @@ class CVATDataLoader:
 
         return data
     
-    def load_train_data(self, tokenizer, embedding_model):
+
+    def load_train_data(self, tokenizer, embedding_model, mode):
         all_files = os.listdir(self.folder_path)
-        aug = naw.ContextualWordEmbsAug(model_path='bert-base-chinese', aug_p=0.2, top_k = 50, device='cuda:0')
+        aug = naw.ContextualWordEmbsAug(model_path='bert-base-chinese', aug_p=0.7, top_k = 150, device='cuda:0')
             
-        if "arg_trainff.csv" in all_files:    
-            csv_files = ["train_bert.csv"]
-        else:
-            csv_files = ['CVAT_1_SD.csv','CVAT_2_SD.csv','CVAT_3_SD.csv','CVAT_4_SD.csv']
+        if "train_text.csv" in all_files and mode == "train":    
+            csv_files = ["train.csv"]
+        elif "val_train_text.csv" in all_files and mode == "val":
+            csv_files = ['bert_val_train.csv']
+        else: 
+            csv_files = ["CVAT_1_SD.csv", "CVAT_2_SD.csv", "CVAT_3_SD.csv", "CVAT_4_SD.csv"]
         print(all_files)
         data = []
         rows = []
@@ -84,24 +87,14 @@ class CVATDataLoader:
                         
                         embedding = ast.literal_eval(row['Embedding'])
                         embedding = torch.tensor([embedding], dtype=torch.float32)
+                        
                         valence_mean = torch.tensor([float(row['Valence_Mean'])], dtype=torch.float32)
                         arousal_mean = torch.tensor([float(row['Arousal_Mean'])], dtype=torch.float32)
                         valence_sd = torch.tensor([float(row['Valence_SD'])], dtype=torch.float32)
                         arousal_sd = torch.tensor([float(row['Arousal_SD'])], dtype=torch.float32)
+
                         data.append((embedding, valence_mean, arousal_mean, valence_sd, arousal_sd))
-                        augmented_text = aug.augment(row["Text"], n=2)
-                        
-                        for i in augmented_text:
-                            tokenized_text = tokenizer.encode(i.replace(" ", ""), add_special_tokens=True)
-                            input_ids = torch.tensor([tokenized_text])
-                            with torch.no_grad():
-                                outputs = embedding_model(input_ids)
-                                embedding = outputs[0].mean(dim=1).squeeze()
-              
-                            row['Embedding'] = embedding.numpy().tolist()
-                            rows.append(row)
-                            data.append((embedding, valence_mean, arousal_mean, valence_sd, arousal_sd))
-                        
+
                         continue
 
                     text = row['Text']
@@ -120,20 +113,20 @@ class CVATDataLoader:
                     rows.append(row)
                     data.append((embedding, valence_mean, arousal_mean, valence_sd, arousal_sd))
                     
-                    augmented_text = aug.augment(row["Text"], n=3)
+                    # augmented_text = aug.augment(row["Text"], n=3)
                         
-                    for i in augmented_text:
-                        row = row.copy()
-                        row['Text'] = i.replace(" ", "")
-                        tokenized_text = tokenizer.encode(i.replace(" ", ""), add_special_tokens=True)
-                        input_ids = torch.tensor([tokenized_text])
-                        with torch.no_grad():
-                            outputs = embedding_model(input_ids)
-                            embedding = outputs[0].mean(dim=1).squeeze()
+                    # for i in augmented_text:
+                    #     row = row.copy()
+                    #     row['Text'] = i.replace(" ", "")
+                    #     tokenized_text = tokenizer.encode(i.replace(" ", ""), add_special_tokens=True)
+                    #     input_ids = torch.tensor([tokenized_text])
+                    #     with torch.no_grad():
+                    #         outputs = embedding_model(input_ids)
+                    #         embedding = outputs[0].mean(dim=1).squeeze()
             
-                        row['Embedding'] = embedding.numpy().tolist()
-                        rows.append(row)
-                        data.append((embedding, valence_mean, arousal_mean, valence_sd, arousal_sd))
+                    #     row['Embedding'] = embedding.numpy().tolist()
+                    #     rows.append(row)
+                    #     data.append((embedding, valence_mean, arousal_mean, valence_sd, arousal_sd))
         if(len(rows) > 0):
             with open("dataset/arg_train.csv", 'w', newline='', encoding='utf-8') as new_file:
                 writer = csv.DictWriter(new_file, fieldnames=rows[0].keys(), delimiter='\t')
@@ -145,7 +138,7 @@ class CVATDataLoader:
         return len(self.data)
 
     def __getitem__(self, index):
-        if(self.mode == "train"):
+        if(self.mode == "train" or self.mode == "val"):
             embedding, valence_mean, arousal_mean, valence_sd, arousal_sd = self.data[index]
             return embedding, valence_mean, arousal_mean, valence_sd, arousal_sd 
         elif self.mode == "test":

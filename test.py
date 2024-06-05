@@ -34,16 +34,16 @@ def test(model, val_loader, device):
             outputs_np = latent.cpu().numpy()
             # print(outputs_np)
             for i in range(len(id)):
-                csv_result[id[i]] = {'Valence': outputs_np[i, 0], 'Arousal': outputs_np[i, 1]}
+                csv_result[id[i]] = {'Valence': np.round(float(outputs_np[i, 0]),2), 'Arousal': np.round(float(outputs_np[i, 1]),2)}
 
     output_csv_path = "submission.csv"
     with open(output_csv_path, 'w', newline='') as csvfile:
         fieldnames = ['ID', 'Valence', 'Arousal']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-
+        writer.writeheader()    
+        
         for id, values in csv_result.items():
-            writer.writerow({'ID': id, 'Valence': f"{values['Valence']:.2f}", 'Arousal': f"{values['Arousal']:.2f}"})
+            writer.writerow({'ID': id, 'Valence': f"{values['Valence']}", 'Arousal': f"{values['Arousal']}"})
 
             
 folder_path = 'dataset'
@@ -51,7 +51,7 @@ dataset = CVATDataLoader(folder_path, tokenizer, embedding, "test")
 dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 model = UnetVAE(input_dim=768, hidden_dim=512, latent_dim = 2, output_dim = 768)
 
-model.load_state_dict(torch.load('sentiment_3_fold_280.pth'))
+model.load_state_dict(torch.load('sentiment_4240.pth'))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)

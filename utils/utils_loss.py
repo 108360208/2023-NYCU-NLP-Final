@@ -38,8 +38,7 @@ class Reconstloss(nn.Module):
         pred_valence, pred_arousal = torch.split(latent_mean, 1, dim=2)
         valence_loss = nn.L1Loss(reduction="none")(pred_valence.squeeze(1), valence)
         arousal_loss = nn.L1Loss(reduction="none")(pred_arousal.squeeze(1), arousal)
-        # print(reson_loss.mean(), valence_loss.mean(), arousal_loss.mean(), KL_loss)
-        return reson_loss.mean()
+        return reson_loss.mean() 
 class KL_Loss(nn.Module):
     def __init__(self, alpha=0.5):
         super(KL_Loss, self).__init__()
@@ -61,10 +60,9 @@ def kl_divergence(mu1, logvar1, mu2, logvar2):
 
     var1 = torch.exp(logvar1)
     var2 = torch.exp(logvar2)
-    # kl_loss = -0.5 * torch.sum(1 + logvar1 - mu1.pow(2) - logvar1.exp())
-    # print(kl_loss)
+
     kl = 0.5 * (logvar2 - logvar1 + (var1 + (mu1 - mu2).pow(2)) / var2 - 1)
     loss = kl.sum()
-    # print(loss)
+    
     return loss
 
